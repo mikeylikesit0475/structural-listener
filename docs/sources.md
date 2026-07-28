@@ -42,14 +42,39 @@ and is the next-finer option if dispersion error needs reducing.
 
 ## Source signatures (crack / friction / impact / noise)
 
-_Pending Sprint 0.3. The Sprint 0.2 `GaussianPulseSource` is a stand-in with:_
+Implemented in `src/structural_listener/sim/signatures.py`. Four types matching the
+classifier labels (ARCHITECTURE.md \u00a71).
 
-| Parameter | Value | Units | Source |
-|-----------|-------|-------|--------|
-| Centre frequency | 60 kHz | Hz | Guess \u2014 inside the A0 band the grid resolves; real crack AE peaks 100\u2013300 kHz but our grid caps at ~100 kHz |
-| Bandwidth | 20 kHz | Hz | Guess \u2014 gives a ~0.3 ms burst, short enough for clean TDOA |
-| Amplitude | 1.0e3 | m/s^2 | Guess \u2014 arbitrary scale; Sprint 0.4 calibrates to a target sensor voltage |
-| Spatial footprint | sigma = 2 cells | \u2014 | Numerical necessity \u2014 a delta source excites near-Nyquist modes that destabilise leapfrog even within CFL |
+| Parameter | Crack | Friction | Impact | Noise | Units | Source |
+|-----------|-------|----------|--------|-------|-------|--------|
+| Centre freq | 80 kHz | 30 kHz | 8 kHz | 50 Hz + 3 harmonics | Hz | see notes |
+| Bandwidth | 40 kHz | 5 kHz | \u2014 (half-sine pulse) | \u2014 (tonal) | Hz | see notes |
+| Duration | 0.3 ms | 2.0 ms | 0.5 ms | continuous | s | see notes |
+| Amplitude | 2.0e3 | 0.8e3 | 5.0e3 | 50 | m/s^2 | see notes |
+
+**Crack-growth.** Real AE crack emissions peak 100\u2013300 kHz [Beattie], [Grosse]. Our
+grid (dx=5mm) resolves up to ~100 kHz, so we centre at 80 kHz with 40 kHz bandwidth \u2014
+the top of the resolvable band. Short duration (~0.3 ms) matches observed burst lengths
+[Pollock]. Amplitude is a guess pending Sprint 0.4 sensor calibration.
+
+**Friction.** Stick-slip and rub signals are narrowband and sustained, exciting a
+structural or sensor resonance [Pollock]. 30 kHz centre / 5 kHz bandwidth / 2 ms duration
+puts this clearly in a different time-frequency bucket from crack. Amplitude is a guess.
+
+**Impact.** A mass strike is a single force impulse (half-sine over contact time), with
+most energy below ~10 kHz [Kaiser], [Grosse]. 8 kHz centre, 0.5 ms contact, 5x crack
+amplitude \u2014 impacts are typically the loudest events in an AE record. Amplitude is a
+guess but the *ratio* to crack is from [Grosse] typical values.
+
+**Electrical noise.** Mains pickup at 50 Hz (UK/EU) or 60 Hz (US) plus harmonics,
+coupling into sensor leads [Pollock]. 50 Hz + 3 harmonics decaying as 1/k. This is a
+*detection* class, not a localisation target \u2014 the nominal source position is
+pipeline bookkeeping, not physics. Harmonic decay 1/k is a guess (first-order model).
+
+All four share a Gaussian spatial footprint (sigma = 2 cells) \u2014 see
+`sim/sources.py` docstring: a delta-function source excites near-Nyquist spatial modes
+that destabilise the leapfrog scheme even within CFL. This is a numerical necessity, not
+a physics choice.
 
 ## Sensor model
 
@@ -59,3 +84,13 @@ _Pending Sprint 0.4._
 
 - **[ASM-Matweb]** ASM Aerospace Specification Metals, Inc., *MatWeb: Aluminum 6061-T6
   Material Properties*, accessed 2025. URL: http://www.matweb.com/search/datasheet.aspx?matguid=1b8c06d0ca1d4b4f86701782c04a3b73 — typical reference values; supplier datasheets may vary by ~2%.
+- **[Beattie]** Beattie, A.G., *Acoustic Emission, Principles and Instrumentation*,
+  Journal of Acoustic Emission 2(1/2), 1983 \u2014 survey of AE source frequency ranges.
+- **[Grosse]** Grosse, C.U. & Ohtsu, M. (eds.), *Acoustic Emission Testing*, Springer,
+  2008 \u2014 standard reference for AE source characteristics and amplitudes.
+- **[Pollock]** Pollock, A.A., *Acoustic Emission Inspection*, Metals Handbook Vol. 17
+  (9th ed.), ASM International, 1989 \u2014 classic survey of AE source types and
+  interference sources.
+- **[Kaiser]** Kaiser, J., *Untersuchungen \u00fcber das Auftreten von Ger\u00e4uschen beim
+  Zugversuch*, PhD thesis, TU M\u00fcnchen, 1950 \u2014 foundational impact/elastic-energy
+  work; impact spectral characteristics tabulated in [Grosse].
