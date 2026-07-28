@@ -28,10 +28,12 @@ from structural_listener.sim.fdtd import SimResult
 class SensorModelConfig:
     """Parameters for the sensor model. See ``docs/sources.md`` for citations."""
 
-    # White noise floor, in m/s (velocity at the sensor). Roughly -60 dB rel 1 m/s.
-    noise_rms_white: float = 1.0e-6
+    # White noise floor, in m/s (velocity at the sensor). A good piezo preamp achieves
+    # ~3e-7 m/s equivalent noise; we use this rather than 1e-6 so the far channels on a
+    # 1 m plate remain detectable (13-16 dB SNR at the default source amplitudes).
+    noise_rms_white: float = 3.0e-7
     # 1/f noise component amplitude at 1 Hz, in m/s.
-    noise_pink_at_1hz: float = 5.0e-7
+    noise_pink_at_1hz: float = 2.0e-7
     # Per-channel gain mismatch: gain = 1 + U(-spread, +spread).
     gain_spread: float = 0.02
     # Material attenuation coefficient at 100 kHz, in Np/m. Aluminium Q~1000 at 100 kHz

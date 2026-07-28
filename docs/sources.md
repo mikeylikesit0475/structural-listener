@@ -50,26 +50,29 @@ classifier labels (ARCHITECTURE.md \u00a71).
 | Centre freq | 80 kHz | 30 kHz | 8 kHz | 50 Hz + 3 harmonics | Hz | see notes |
 | Bandwidth | 40 kHz | 5 kHz | \u2014 (half-sine pulse) | \u2014 (tonal) | Hz | see notes |
 | Duration | 0.3 ms | 2.0 ms | 0.5 ms | continuous | s | see notes |
-| Amplitude | 2.0e3 | 0.8e3 | 5.0e3 | 50 | m/s^2 | see notes |
+| Amplitude | 1.0e4 | 4.0e3 | 2.5e4 | 200 | m/s^2 | see notes |
 
 **Crack-growth.** Real AE crack emissions peak 100\u2013300 kHz [Beattie], [Grosse]. Our
 grid (dx=5mm) resolves up to ~100 kHz, so we centre at 80 kHz with 40 kHz bandwidth \u2014
 the top of the resolvable band. Short duration (~0.3 ms) matches observed burst lengths
-[Pollock]. Amplitude is a guess pending Sprint 0.4 sensor calibration.
+[Pollock]. Amplitude calibrated in Sprint 1.1 so all four corner sensors detect a
+centre-plate event through the sensor model's noise floor.
 
 **Friction.** Stick-slip and rub signals are narrowband and sustained, exciting a
 structural or sensor resonance [Pollock]. 30 kHz centre / 5 kHz bandwidth / 2 ms duration
-puts this clearly in a different time-frequency bucket from crack. Amplitude is a guess.
+puts this clearly in a different time-frequency bucket from crack. Amplitude scaled to
+be detectable at all four sensors.
 
 **Impact.** A mass strike is a single force impulse (half-sine over contact time), with
-most energy below ~10 kHz [Kaiser], [Grosse]. 8 kHz centre, 0.5 ms contact, 5x crack
-amplitude \u2014 impacts are typically the loudest events in an AE record. Amplitude is a
-guess but the *ratio* to crack is from [Grosse] typical values.
+most energy below ~10 kHz [Kaiser], [Grosse]. 8 kHz centre, 0.5 ms contact, 2.5x crack
+amplitude \u2014 impacts are typically the loudest events in an AE record. Amplitude ratio
+from [Grosse] typical values.
 
 **Electrical noise.** Mains pickup at 50 Hz (UK/EU) or 60 Hz (US) plus harmonics,
 coupling into sensor leads [Pollock]. 50 Hz + 3 harmonics decaying as 1/k. This is a
 *detection* class, not a localisation target \u2014 the nominal source position is
 pipeline bookkeeping, not physics. Harmonic decay 1/k is a guess (first-order model).
+Amplitude set so the noise signature is detectable but well below mechanical events.
 
 All four share a Gaussian spatial footprint (sigma = 2 cells) \u2014 see
 `sim/sources.py` docstring: a delta-function source excites near-Nyquist spatial modes
@@ -82,8 +85,8 @@ Implemented in `src/structural_listener/sim/sensor_model.py`. Three effects, all
 
 | Parameter | Value | Units | Source |
 |-----------|-------|-------|--------|
-| White noise floor | 1.0e-6 | m/s | Guess \u2014 typical piezo preamp noise, -60 dB rel 1 m/s |
-| Pink (1/f) noise at 1 Hz | 5.0e-7 | m/s | Guess \u2014 1/f component of sensor electronics noise |
+| White noise floor | 3.0e-7 | m/s | Guess \u2014 good piezo preamp equivalent noise; calibrated so far channels on a 1 m plate are detectable |
+| Pink (1/f) noise at 1 Hz | 2.0e-7 | m/s | Guess \u2014 1/f component of sensor electronics noise |
 | Gain mismatch spread | \u00b10.02 | \u2014 | Guess \u2014 typical piezo channel-to-channel variation is 1\u20133% [Grosse] |
 | Attenuation coeff at 100 kHz | 1.0 | Np/m | [Grosse] \u2014 aluminium Q~1000 at 100 kHz gives \u03b1~1 Np/m |
 | Attenuation freq exponent | 2.0 | \u2014 | [Grosse] \u2014 hysteretic damping scales as f^2 for metals |
