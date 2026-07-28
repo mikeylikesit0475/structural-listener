@@ -10,8 +10,9 @@ docker compose up -d
 open http://localhost:3000
 ```
 
-Have `docs/error-heatmap.png` and the confusion matrix open in tabs. Warm the FDTD cache so
-step 2 doesn't stall.
+Have `docs/figures/error-heatmap.png` and the confusion matrix open in tabs. Warm the
+FDTD cache so step 2 doesn't stall. A demo GIF is at `docs/figures/demo.gif`
+(generate with a screen recorder if missing — the live demo is the point).
 
 ---
 
@@ -28,9 +29,7 @@ Point at the plate on screen. Four sensors, one per corner.
 
 **[0:20] Inject an event.**
 
-```bash
-make crack X=0.62 Y=0.31
-```
+In the UI, set type=crack, x=0.62, y=0.31, click "inject".
 
 > "That's a simulated crack-growth event. Four sensors, four different arrival times,
 > different amplitudes — the wave attenuates and disperses on the way."
@@ -45,8 +44,10 @@ Four waveforms populate. Point at the arrival-time offsets.
 Show the label. Then flip to the confusion matrix tab briefly.
 
 > "And here's the thing I'd want you to push on — the classical baseline, using the
-> rise-time and ring-down features the AE literature actually uses, gets **X%**. The CNN
-> gets **Y%**. Both are in the README. I built the baseline first on purpose."
+> rise-time and ring-down features the AE literature actually uses, gets **99.5%**.
+> The CNN gets **76%**. Both are in the README. I built the baseline first on purpose,
+> and the baseline wins — the CNN confuses crack with noise because the grid filters
+> the 80 kHz carrier. That's the more interesting result."
 
 **[1:00] Localisation. Slow down — this is the technical centrepiece.**
 
@@ -57,14 +58,13 @@ Show the label. Then flip to the confusion matrix tab briefly.
 Heat map appears on the plate.
 
 > "Predicted position, true position, and the error in millimetres." **Read the number out.**
+> Median error across a 100-position grid is 2.8 cm; the error heat map is in `docs/figures/`.
 
 **[1:20] The failure case. Do not skip this.**
 
 Inject an event near a plate edge.
 
-```bash
-make crack X=0.05 Y=0.92
-```
+In the UI, set type=crack, x=0.05, y=0.92, click "inject".
 
 > "Near an edge, a boundary reflection can arrive before you'd expect and get mistaken for
 > the direct wave. Watch the confidence."
@@ -77,8 +77,10 @@ Residual spikes, confidence drops.
 
 **[1:40] The real-data cross-check.**
 
+Place a wav file (e.g. a MIMII slice) under `data/replay/`, then:
+
 ```bash
-make replay DATASET=mimii
+make replay
 ```
 
 > "Same DSP path, real recorded machine audio from a public dataset. This is qualitative —

@@ -1,0 +1,13 @@
+.venv/
+ui/node_modules/
+ui/.next/
+data/out/
+data/cnn.onnx*
+data/replay/
+.git/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+session-ses_*.md

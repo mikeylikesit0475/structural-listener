@@ -35,8 +35,8 @@ class _BaseSource(Source):
     ) -> None:
         self._xy = source_xy_m
         self._dx = dx
-        self._i = min(max(round(source_xy_m[0] / dx), 1, nx - 2), 1)
-        self._j = min(max(round(source_xy_m[1] / dx), 1, ny - 2), 1)
+        self._i = min(max(round(source_xy_m[0] / dx), 1), nx - 2)
+        self._j = min(max(round(source_xy_m[1] / dx), 1), ny - 2)
         self._footprint = _gaussian_footprint(nx, ny, self._i, self._j, spatial_sigma_cells)
 
     @property

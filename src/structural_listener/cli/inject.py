@@ -82,7 +82,7 @@ def inject_event(
         duration_s=sim_result.duration_s,
         source_xy_m=np.array(sim_result.true_source_xy_m, dtype=np.float64),
         source_type=source_type,
-        sensor_positions_m=np.array(SensorLayout().positions_m, dtype=np.float64),
+        sensor_positions_m=np.array(SensorLayout().positions_for_plate(plate), dtype=np.float64),
         gains=meta["gains"],
         distances_m=meta["distances_m"],
     )

@@ -1,4 +1,4 @@
-.PHONY: install lint typecheck test check crack friction impact noise replay clean
+.PHONY: install lint typecheck test check crack friction impact noise replay heatmap demo-gif serve clean
 
 install: ## Sync dev environment
 	uv sync --all-extras --dev
@@ -21,9 +21,22 @@ check: lint typecheck test ## All gates
 crack friction impact noise:
 	uv run python -m structural_listener.cli.inject $@ --x $(X) --y $(Y)
 
+# --- Sprint 1.4: regenerate the localisation error heat map (docs/figures/error-heatmap.png) ---
+heatmap:
+	uv run python -m structural_listener.eval.plot_error_heatmap
+
 replay:
-	@echo "Target 'replay' not implemented yet (Sprint 2.7)."
-	@exit 1
+# --- Sprint 2.7: replay real recorded audio through the DSP path (qualitative) ---
+# Place wav files under data/replay/ (e.g. a MIMII slice) then: make replay
+	uv run python -m structural_listener.model.replay
+
+# --- Sprint 3.1: FastAPI + WebSocket service ---
+serve:
+	uv run uvicorn structural_listener.service.app:app --reload --port 8000
+
+# --- Sprint 3.7: demo GIF (animated simulation of the live UI) ---
+demo-gif:
+	uv run python -m structural_listener.eval.plot_demo_gif
 
 clean: ## Remove caches and generated artefacts
 	rm -rf .pytest_cache .mypy_cache .ruff_cache .coverage htmlcov

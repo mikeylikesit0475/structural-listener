@@ -129,9 +129,11 @@ def apply_sensor_model(
     cfg = config or SensorModelConfig()
     src = source_xy_m or sim_result.true_source_xy_m
     if sensor_positions_m is None:
-        from structural_listener.sim.config import SensorLayout
+        from structural_listener.sim.config import PlateConfig, SensorLayout
 
-        sensor_positions_m = SensorLayout().positions_m
+        sensor_positions_m = SensorLayout().positions_for_plate(
+            sim_result.plate if sim_result.plate is not None else PlateConfig()
+        )
 
     rng = np.random.default_rng(cfg.seed)
     n_sensors, n_samples = sim_result.waveforms.shape

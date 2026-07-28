@@ -182,7 +182,16 @@ def simulate(
 
     from structural_listener.sim.config import SensorLayout
 
-    sensor_idx = SensorLayout().as_grid_indices(dx, nx, ny)
+    layout = SensorLayout()
+    sensor_positions = layout.positions_for_plate(plate)
+    # Map positions to grid indices.
+    lo = 1
+    hi_x = max(nx - 2, lo)
+    hi_y = max(ny - 2, lo)
+    sensor_idx = tuple(
+        (min(max(round(x / dx), lo), hi_x), min(max(round(y / dx), lo), hi_y))
+        for x, y in sensor_positions
+    )
 
     state = _make_initial_state(nx, ny)
     # Seed phi from the initial (zero) field.

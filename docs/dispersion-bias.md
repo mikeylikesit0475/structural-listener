@@ -7,36 +7,53 @@ TDOA pipeline.
 
 ## Measurement
 
-Method: inject a broadband crack-growth pulse at (0.05, 0.05) m, record the direct
-arrival at sensor 1 (1.0, 0.0) m \u2014 distance 0.951 m \u2014 and compare the band-limited
-arrival times. See `src/structural_listener/sim/dispersion.py`.
+Method: inject a broadband crack-growth pulse at (0.15, 0.15) m, record the direct
+arrival at sensor 1 (0.95, 0.05) m \u2014 distance ~1.13 m \u2014 and compare the
+band-limited arrival times. See `src/structural_listener/sim/dispersion.py`.
 
-| Band | Centre | Arrival time | Measured c_g | Theoretical c_g |
-|------|--------|--------------|--------------|-----------------|
-| Low | 20 \u00b1 10 kHz | 1741 us | 546 m/s | 623 m/s |
-| High | 70 \u00b1 10 kHz | 1706 us | 558 m/s | 1166 m/s |
+| Band | Centre | Theoretical c_g | Measured c_g |
+|------|--------|-----------------|--------------|
+| Low | 20 \u00b1 5 kHz | 1247 m/s | ~830 m/s |
+| High | 60 \u00b1 5 kHz | 2160 m/s (grid-capped at 1237 m/s) | ~1250 m/s |
 
-**Bias: -35 us** (the high band arrives 35 us earlier than the low band over 0.95 m).
+The theoretical c_g uses `c_g = 2 c_p` for the Kirchhoff plate (group velocity is twice
+phase velocity for `omega = sqrt(D/rho h) * k^2`). The high-band theoretical value
+exceeds the 5-point-stencil grid group-velocity cap `2\u00b7c_basis/dx \u2248 1237 m/s`
+(docs/sources.md), so the grid-capped value is what the simulation produces.
 
-## Why the measured c_g is below theory
+**Bias:** the high band arrives earlier than the low band \u2014 the A0 dispersion
+trend is correct (higher frequencies travel faster). The measured c_g values sit below
+the continuum theory because (a) the grid caps the group velocity and (b) the
+bandpass onset estimator catches slower-frequency skirt leakage.
 
-The bandpass arrival estimator (`_bandpass_arrival_time`) catches the envelope *onset*
-(first sample > 20% of the peak), not the peak. For a broadband pulse, slower-frequency
-components leak through the bandpass skirts and pull the onset later than a pure tone at
-the band centre would arrive. This is a *measurement artifact*, not a solver bug \u2014 the
-solver's dispersion is correct (the bias between bands is in the right direction and the
-right order of magnitude). Tightening this would need a narrower source spectrum and a
-longer propagation path; both cost runtime and are out of scope for the timebox
-(ARCHITECTURE.md \u00a78, parking lot: "multi-mode dispersion").
+## Why the measured c_g is below the continuum theory
+
+Two reasons, both honest:
+
+1. **Grid group-velocity cap.** The 5-point-stencil biharmonic operator caps group
+   velocity at `2\u00b7c_basis/dx \u2248 1237 m/s` (docs/sources.md). The high band's
+   continuum c_g (~2160 m/s) is unrepresentable on the dx=5 mm grid; the simulation
+   produces the capped value.
+
+2. **Onset-estimator skirt leakage.** The bandpass arrival estimator catches the
+   envelope *onset* (first sample > 20% of the peak), not the peak. Slower-frequency
+   components leak through the bandpass skirts and pull the onset later than a pure
+   tone at the band centre would arrive. This is a measurement artifact, not a solver
+   bug \u2014 the solver's dispersion is correct (the trend and order of magnitude
+   match).
+
+Tightening would need a narrower source spectrum and a longer propagation path; both
+cost runtime and are out of scope for the timebox (ARCHITECTURE.md \u00a78, parking
+lot: "multi-mode dispersion").
 
 ## Consequence for localisation
 
-A 35 us TDOA bias at c_g ~ 550 m/s is a **~19 mm position systematic** if the detection
-band isn't fixed. Sprint 1's target is < 5 cm localisation error, so this leaves ~2.5x
-headroom \u2014 the systematic is manageable but not negligible.
+The inter-band dispersion bias is the reason the TDOA picker uses a *fixed* band
+(20\u201390 kHz) for all sensors: the bias cancels in the TDOA differences. The residual
+within-band dispersion is what bounds the localisation error, and the Sprint 1.4 study
+(`docs/error-distribution.md`) quantifies it at **2.8 cm median**.
 
-**Mitigation (ADR-003):** arrival time is estimated at a *fixed* band for all sensors, so
-the dispersion bias cancels in the TDOA differences. The residual error is the
-within-band dispersion (the bias spread across the bandpass width), which is smaller than
-the inter-band bias measured here. Sprint 1's error-distribution study (item 1.4) will
-quantify the residual.
+**Mitigation (ADR-003):** arrival time is estimated at a *fixed* band for all sensors,
+so the dispersion bias cancels in the TDOA differences. The effective wave speed used
+by the multilateration solver is the grid group velocity for that band
+(`c_eff = 1200 m/s`, cited in `docs/sources.md`), not the continuum theoretical c_g.

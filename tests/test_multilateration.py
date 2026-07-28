@@ -1,8 +1,8 @@
 """Sprint 1.3: Gauss-Newton multilateration recovers a known source to < 5 cm.
 
 The CI-asserted test: inject events at 100 positions across the plate, run the full
-pipeline (hit detect -> TDOA -> multilateration), and assert the median localisation
-error is < 5 cm. This is the Sprint 1 definition of done (BACKLOG.md).
+pipeline (gated envelope-peak picker -> multilateration), and assert the median
+localisation error is < 5 cm. This is the Sprint 1 definition of done (BACKLOG.md).
 
 Also tests the solver in isolation with synthetic arrival times (no noise, no
 dispersion) to verify the maths, and the residual-as-confidence behaviour.
@@ -16,10 +16,18 @@ import numpy as np
 import pytest
 
 from structural_listener.cli.inject import inject_event
+from structural_listener.dsp.tdoa import TdoaConfig, pick_arrival_times
 from structural_listener.localize.multilateration import (
     solve,
 )
 from structural_listener.sim.config import SensorLayout
+
+# Effective wave speed for the gated envelope-peak picker on the 20-90 kHz band,
+# on the dx=5 mm grid. The 5-point-Laplacian biharmonic operator caps the group
+# velocity at 2 * c_basis / dx ~ 1237 m/s, and the band sits above ~20 kHz where the
+# grid dispersion is near its asymptote, so the measured c_eff is ~1200 m/s. This is
+# a grid property, not a calibration hack \u2014 see docs/sources.md.
+_C_EFF_M_PER_S = 1200.0
 
 
 def _synthetic_arrival_times(
@@ -73,24 +81,14 @@ def test_residual_is_high_for_inconsistent_arrival_times() -> None:
     assert result.confidence < 0.9, "inconsistent arrivals gave high confidence"
 
 
-@pytest.mark.parametrize("seed", [0, 1, 2])
+@pytest.mark.parametrize("seed", [0, 1, 2, 3, 4])
 def test_recovers_source_from_simulated_pipeline(tmp_path: Path, seed: int) -> None:
-    """End-to-end: inject -> TDOA -> multilateration.
+    """End-to-end: inject -> gated envelope-peak TDOA -> multilateration -> < 12 cm.
 
-    This is the hard part: on a 1 m reflective plate, the cross-correlation TDOA can
-    pick up reflections instead of the direct arrival, giving inconsistent TDOAs and a
-    high multilateration residual. The test asserts that the solver *runs* and produces
-    a position with a residual, not that the error is below a fixed threshold \u2014
-    the error depends on whether the TDOA caught the direct arrival or a reflection,
-    which is the ADR-006 failure mode. The residual-as-confidence is the mitigation:
-    a high residual means "I don't know", not a confidently wrong coordinate.
-
-    The 100-position grid test below asserts the *median* error over many positions,
-    which smooths over the reflection-dominated cases.
+    Each individual position must localise within 12 cm. The 100-position grid test
+    below asserts the < 5 cm *median*; here we assert a per-position ceiling that
+    accommodates near-edge positions where the direct-to-reflection gap is smallest.
     """
-    from structural_listener.dsp.tdoa import TdoaConfig, _bandpass, _envelope
-    from structural_listener.localize.multilateration import solve as mlat_solve
-
     rng = np.random.default_rng(seed)
     x = float(rng.uniform(0.2, 0.8))
     y = float(rng.uniform(0.2, 0.8))
@@ -102,61 +100,28 @@ def test_recovers_source_from_simulated_pipeline(tmp_path: Path, seed: int) -> N
         src = np.asarray(data["source_xy_m"])
         sensors = np.asarray(data["sensor_positions_m"])
 
-    cfg = TdoaConfig()
-    c_min = 500.0
-    n = wf.shape[1]
-
-    arrival_times = np.full(4, np.nan)
-    arrival_times[0] = 0.0
-
-    for ch in range(1, 4):
-        bp_ref = _bandpass(wf[0], sr, cfg.band_low_hz, cfg.band_high_hz)
-        bp_test = _bandpass(wf[ch], sr, cfg.band_low_hz, cfg.band_high_hz)
-        env_ref = _envelope(bp_ref)
-        env_test = _envelope(bp_test)
-
-        max_lag = int(1.5 / c_min * sr)
-        window = min(int(2.0e-3 * sr), n)
-        ref_env = env_ref[:window]
-        test_env = env_test[:window]
-        corr = np.correlate(ref_env, test_env, mode="full")
-        centre = ref_env.shape[0] - 1
-        lo = max(centre - max_lag, 0)
-        hi = min(centre + max_lag + 1, corr.shape[0])
-        peak_idx = lo + int(np.argmax(corr[lo:hi]))
-        lag = peak_idx - centre
-        arrival_times[ch] = lag / sr
-
-    c_eff = 850.0
-    result = mlat_solve(sensors, arrival_times, c_eff)
+    arrival_times = pick_arrival_times(wf, sr, TdoaConfig())
+    result = solve(sensors, arrival_times, _C_EFF_M_PER_S)
     error = float(np.hypot(result.position_m[0] - src[0], result.position_m[1] - src[1]))
-    # The solver must produce a result. The error may be large if reflections dominated
-    # the TDOA \u2014 that's the ADR-006 failure mode, and the residual reports it.
     assert result.converged, "solver did not converge"
-    assert 0.0 <= result.position_m[0] <= 2.0, "estimated x wildly out of plate"
-    assert 0.0 <= result.position_m[1] <= 2.0, "estimated y wildly out of plate"
-    # The error must be finite (not NaN/inf).
-    assert np.isfinite(error), f"error is {error}"
+    assert error < 0.12, (
+        f"source ({x:.2f},{y:.2f}): estimated {result.position_m}, "
+        f"error {error * 100:.1f} cm > 12 cm, residual {result.residual * 1e6:.0f} us"
+    )
 
 
-def test_median_error_over_100_positions(tmp_path: Path) -> None:
-    """Localisation error distribution over a 10x10 grid of source positions.
+def test_median_error_under_5cm_over_100_positions(tmp_path: Path) -> None:
+    """The Sprint 1 CI assertion: median localisation error < 5 cm over 100 positions.
 
-    The median error is asserted (not the max) because near-edge positions have higher
-    error due to reflections (ADR-006) \u2014 the max is studied in Sprint 1.4. The
-    target is < 5 cm median (BACKLOG.md); the current pipeline achieves this on
-    interior positions where the direct arrival is detectable at >= 3 sensors.
+    A 10x10 grid of source positions across the plate interior (0.15-0.85 m). The
+    median is asserted (not the max) because near-edge positions have higher error
+    due to reflections (ADR-006) \u2014 the max is studied in Sprint 1.4.
 
-    This is the Sprint 1 CI assertion. If it fails, the TDOA pipeline is catching
-    reflections instead of direct arrivals \u2014 the fix is in the TDOA, not the solver.
+    If this fails, the TDOA picker is catching reflections instead of direct arrivals
+    \u2014 the fix is in the picker, not the solver. The solver maths is verified
+    separately by ``test_recovers_known_source_with_perfect_arrival_times``.
     """
-    from structural_listener.dsp.tdoa import TdoaConfig, _bandpass, _envelope
-    from structural_listener.localize.multilateration import solve as mlat_solve
-
     sensors = np.array(SensorLayout().positions_m)
-    cfg = TdoaConfig()
-    c_min = 500.0
-    c_eff = 850.0
     errors = []
     grid = np.linspace(0.15, 0.85, 10)
 
@@ -168,24 +133,9 @@ def test_median_error_over_100_positions(tmp_path: Path) -> None:
                 sr = float(data["sample_rate_hz"])
                 src = np.asarray(data["source_xy_m"])
 
-            arrival_times = np.full(4, np.nan)
-            arrival_times[0] = 0.0
-            for ch in range(1, 4):
-                bp_ref = _bandpass(wf[0], sr, cfg.band_low_hz, cfg.band_high_hz)
-                bp_test = _bandpass(wf[ch], sr, cfg.band_low_hz, cfg.band_high_hz)
-                env_ref = _envelope(bp_ref)
-                env_test = _envelope(bp_test)
-                max_lag = int(1.5 / c_min * sr)
-                window = min(int(2.0e-3 * sr), wf.shape[1])
-                corr = np.correlate(env_ref[:window], env_test[:window], mode="full")
-                centre = window - 1
-                lo = max(centre - max_lag, 0)
-                hi = min(centre + max_lag + 1, corr.shape[0])
-                peak_idx = lo + int(np.argmax(corr[lo:hi]))
-                arrival_times[ch] = (peak_idx - centre) / sr
-
+            arrival_times = pick_arrival_times(wf, sr, TdoaConfig())
             try:
-                result = mlat_solve(sensors, arrival_times, c_eff)
+                result = solve(sensors, arrival_times, _C_EFF_M_PER_S)
             except ValueError:
                 continue
             error = float(np.hypot(result.position_m[0] - src[0], result.position_m[1] - src[1]))
@@ -193,13 +143,11 @@ def test_median_error_over_100_positions(tmp_path: Path) -> None:
 
     assert len(errors) >= 80, f"only {len(errors)}/100 positions produced a localisation"
     median_error = float(np.median(errors))
-    # The Sprint 1 target is < 5 cm median (BACKLOG.md). The current pipeline achieves
-    # ~50 cm median because the cross-correlation TDOA catches reflections on the
-    # reflective plate (ADR-006). The solver maths is correct (verified with synthetic
-    # arrival times); the TDOA estimation needs improvement. The assertion here is that
-    # the pipeline runs and produces finite results; the accuracy gap is documented.
-    assert median_error < 1.0, (
-        f"median error {median_error * 100:.1f} cm > 100 cm \u2014 pipeline broken; "
+    # 5 cm median: the Sprint 1 target (BACKLOG.md). Not a bare approx \u2014 the gated
+    # envelope-peak picker on a 20-90 kHz band with c_eff=1200 m/s achieves ~3 cm
+    # median after the source-injection bug fix.
+    assert median_error < 0.05, (
+        f"median error {median_error * 100:.1f} cm > 5 cm over {len(errors)} positions; "
         f"mean {float(np.mean(errors)) * 100:.1f} cm, "
         f"p90 {float(np.percentile(errors, 90)) * 100:.1f} cm"
     )

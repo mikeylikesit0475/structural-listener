@@ -1,13 +1,22 @@
 """Time-difference-of-arrival (TDOA) estimation.
 
-Two approaches are used:
+Two pickers are provided:
 
-1. **Onset-based TDOA**: the hit detector's onset times give an integer-sample TDOA.
-   This is robust to reflections (ADR-006) because the onset is the *first* above-
-   threshold crossing, which is the direct arrival.
-2. **Cross-correlation refinement**: the band-limited signals are cross-correlated in a
-   short window around the onsets, and a parabolic interpolation around the peak gives
-   sub-sample precision. The window excludes boundary reflections.
+1. **Gated envelope-peak picker** (`pick_arrival_times`): the primary arrival-time
+   estimator used by the Sprint 1 localisation pipeline. For each channel, bandpass
+   to the fixed detection band, take the analytic-signal envelope, find the first
+   sample crossing `peak_fraction` of the envelope maximum, then return the envelope
+   peak within a short `gate_s` window after that crossing. The gate excludes later
+   boundary reflections (ADR-006), and the *peak* (not the first-crossing) is robust
+   to band-limited noise bursts that fire the threshold before the real wave arrives.
+   This yields one absolute arrival time per channel; the multilateration solver takes
+   differences.
+
+2. **Onset + cross-correlation refinement** (`estimate_tdoa`, `estimate_all_tdoas`):
+   a pairwise estimator kept for the synthetic-delay unit tests and as a fallback.
+   On a reflective dispersive plate the cross-correlation window can catch a
+   reflection instead of the direct arrival; the gated envelope-peak picker is the
+   preferred method for end-to-end localisation.
 
 The fixed detection band (20-90 kHz) is used for all sensors so the dispersion bias
 cancels in the TDOA differences (ADR-003).
@@ -32,6 +41,15 @@ class TdoaConfig:
     # long enough to capture the direct burst (~0.3-0.5 ms) but short enough to exclude
     # the first boundary reflection (~1-2 ms on a 1 m plate).
     refinement_window_s: float = 0.5e-3
+    # --- Gated envelope-peak picker (Sprint 1.3) ---
+    # Fraction of the envelope maximum used as the first-crossing threshold. Low
+    # enough to fire on the direct arrival, high enough to ignore band-limited noise
+    # bursts. 0.3 empirically separates the direct burst from noise on the 1 m plate.
+    peak_fraction: float = 0.3
+    # Length of the gate (seconds) after the first crossing within which we take the
+    # envelope peak. Must be shorter than the direct-to-first-reflection gap on the
+    # plate (~1 ms on a 1 m plate); 0.35 ms is conservative.
+    gate_s: float = 0.35e-3
 
 
 @dataclass(frozen=True, slots=True)
@@ -218,3 +236,56 @@ def estimate_all_tdoas(
         if est is not None:
             result[ch] = est
     return result
+
+
+def _gated_envelope_peak(signal: np.ndarray, sample_rate_hz: float, cfg: TdoaConfig) -> float:
+    """Return the absolute arrival time (seconds) of the direct wave at one channel.
+
+    Steps:
+    1. Bandpass to the fixed detection band.
+    2. Take the analytic-signal envelope (Hilbert transform via FFT).
+    3. Find the first sample where the envelope exceeds ``peak_fraction`` of its
+       global maximum \u2014 the direct-arrival window opens here.
+    4. Return the time of the envelope peak within the ``gate_s`` window after that
+       crossing. The gate excludes later boundary reflections (ADR-006).
+
+    Returns NaN if no sample crosses the threshold (no detectable arrival).
+    """
+    bp = _bandpass(signal, sample_rate_hz, cfg.band_low_hz, cfg.band_high_hz)
+    env = _envelope(bp)
+    peak = float(np.max(env))
+    if peak <= 0.0:
+        return float("nan")
+    above = np.where(env >= cfg.peak_fraction * peak)[0]
+    if above.size == 0:
+        return float("nan")
+    start = int(above[0])
+    gate_end = min(start + int(cfg.gate_s * sample_rate_hz), env.shape[0])
+    if gate_end <= start:
+        return float(start) / sample_rate_hz
+    peak_idx = start + int(np.argmax(env[start:gate_end]))
+    return float(peak_idx) / sample_rate_hz
+
+
+def pick_arrival_times(
+    waveforms: np.ndarray,
+    sample_rate_hz: float,
+    config: TdoaConfig | None = None,
+) -> np.ndarray:
+    """Pick one absolute arrival time per channel via the gated envelope-peak method.
+
+    Args:
+        waveforms: (n_channels, n_samples) sensor signals.
+        sample_rate_hz: sampling rate.
+        config: picker parameters. If None, uses ``TdoaConfig()`` defaults.
+
+    Returns:
+        (n_channels,) array of absolute arrival times in seconds. Channels with no
+        detectable arrival are NaN; the multilateration solver excludes them.
+
+    """
+    cfg = config or TdoaConfig()
+    times = np.empty(waveforms.shape[0], dtype=np.float64)
+    for ch in range(waveforms.shape[0]):
+        times[ch] = _gated_envelope_peak(waveforms[ch], sample_rate_hz, cfg)
+    return times

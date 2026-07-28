@@ -65,19 +65,33 @@ class SolverConfig:
 
 @dataclass(frozen=True, slots=True)
 class SensorLayout:
-    """Four piezo sensors at the plate corners (1 m x 1 m), indexed counter-clockwise.
+    """Four piezo sensors near the plate corners, indexed counter-clockwise.
 
+    Sensors are placed a few cells *inward* from the corners (2 cm on a 1 m plate) to
+    avoid numerical artifacts from the clamped-boundary zeroing at the grid edge.
     Corner placement maximises the baseline aperture for multilateration (Sprint 1) and
     matches the demo in ARCHITECTURE.md \u00a71. Coordinates are in metres, origin at the
     bottom-left corner of the plate.
+
+    Attributes:
+        inset_m: distance from each edge to the sensor position, in metres.
+
     """
 
-    positions_m: tuple[tuple[float, float], ...] = (
-        (0.0, 0.0),
-        (1.0, 0.0),
-        (1.0, 1.0),
-        (0.0, 1.0),
-    )
+    inset_m: float = 0.05  # 5 cm from each edge; avoids boundary numerical artifacts
+
+    def positions_for_plate(self, plate: PlateConfig) -> tuple[tuple[float, float], ...]:
+        """Return sensor positions scaled to the given plate dimensions."""
+        x0 = self.inset_m
+        x1 = plate.length - self.inset_m
+        y0 = self.inset_m
+        y1 = plate.width - self.inset_m
+        return ((x0, y0), (x1, y0), (x1, y1), (x0, y1))
+
+    @property
+    def positions_m(self) -> tuple[tuple[float, float], ...]:
+        """Sensor positions for the default 1 m plate (backwards compatibility)."""
+        return self.positions_for_plate(PlateConfig())
 
     def as_grid_indices(self, dx: float, nx: int, ny: int) -> tuple[tuple[int, int], ...]:
         """Return (i, j) grid indices for each sensor, clamped to the interior grid.

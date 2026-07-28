@@ -36,6 +36,17 @@ concentrate energy below ~80 kHz, so the grid is fit for purpose. Coarsening to 
 would cut runtime ~4x but pushes below 2 ppw at 50 kHz; that is the documented fallback if
 a later sprint needs more headroom (CLAUDE.md).
 
+**Effective wave speed for TDOA localisation (c_eff = 1200 m/s).** The 5-point-stencil
+biharmonic operator caps the grid group velocity at `2 \u00b7 c_basis / dx = 2 \u00b7 sqrt(D/rho h) / dx \u2248 1237 m/s` (the discrete-operator analogue of the continuum
+`c_g = 2 c_p` for the Kirchhoff plate). The TDOA picker uses the 20\u201390 kHz band, and
+the measured per-band group velocities on this grid rise from ~830 m/s at 20 kHz to
+~1410 m/s at 80 kHz; the wideband envelope-peak pick lands at a weighted average of
+~1200 m/s, which is what the multilateration solver uses as `c_eff`. This is a property
+of the discrete grid + band, not a free parameter \u2014 a finer grid (dx = 2.5 mm) would
+raise the cap to ~2474 m/s and the continuum c_g (~2067 m/s at 55 kHz) would take over.
+Recorded here so the constant in `tests/test_multilateration.py::_C_EFF_M_PER_S` is cited,
+per ADR-005.
+
 **Wall-clock (Ryzen AI Max+ 395, NumPy CPU).** A 5 ms simulation at N=200 (dx=5mm) runs in
 ~370 ms, comfortably under the < 5 s / event budget. N=400 (dx=2.5mm) would run in ~1.3 s
 and is the next-finer option if dispersion error needs reducing.

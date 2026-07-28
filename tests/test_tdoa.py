@@ -13,8 +13,7 @@ from pathlib import Path
 import numpy as np
 
 from structural_listener.cli.inject import inject_event
-from structural_listener.dsp.hit_detection import detect_hits
-from structural_listener.dsp.tdoa import estimate_all_tdoas, estimate_tdoa
+from structural_listener.dsp.tdoa import TdoaConfig, estimate_tdoa, pick_arrival_times
 
 
 def _synthetic_delayed_pair(
@@ -81,12 +80,15 @@ def test_returns_none_for_uncorrelated_signals() -> None:
 
 
 def test_tdoa_matches_geometric_prediction_on_sim(tmp_path: Path) -> None:
-    """On a simulated crack event, the TDOA matches distance_diff / c_g within 30 us.
+    """On a simulated crack event, the TDOA matches distance_diff / c_eff within 30 us.
 
-    The 30 us tolerance is the dispersion-bias budget from docs/dispersion-bias.md:
-    the band-limited arrival has ~35 us of inter-band bias, and we're using a wide
-    band (20-90 kHz), so the effective bias is a fraction of that. 30 us at c~1000 m/s
-    is ~3 cm \u2014 within the Sprint 1 localisation target.
+    Uses the gated envelope-peak picker (the Sprint 1.3 arrival-time estimator). The
+    effective wave speed is the grid group velocity (~1200 m/s for the 20-90 kHz band
+    on the dx=5mm grid \u2014 see docs/sources.md), not the continuum theoretical c_g,
+    because the 5-point-stencil biharmonic operator caps group velocity at
+    2*c_basis/dx ~ 1237 m/s.
+
+    30 us at c~1200 m/s is ~3.6 cm \u2014 within the Sprint 1 localisation target.
     """
     path = inject_event("crack", 0.2, 0.2, duration_s=3.0e-3, out_dir=tmp_path)
     with np.load(path) as data:
@@ -95,27 +97,15 @@ def test_tdoa_matches_geometric_prediction_on_sim(tmp_path: Path) -> None:
         src = np.asarray(data["source_xy_m"])
         sensors = np.asarray(data["sensor_positions_m"])
 
-    hits = detect_hits(wf, sr)
-    onsets = {h.channel: h.onset_sample for h in hits}
-    tdoas = estimate_all_tdoas(wf, sr, ref_channel=0, onsets_samples=onsets)
-    assert 2 in tdoas, "channel 2 TDOA estimate missing"
-
-    # Geometric prediction: TDOA(2 - 0) = (dist(src, s2) - dist(src, s0)) / c_g.
-    # c_g at the band centre (~55 kHz) from the A0 theory.
-    from structural_listener.sim.config import PlateConfig
-    from structural_listener.sim.dispersion import theoretical_group_velocity
-
-    c_g = theoretical_group_velocity(55.0e3, PlateConfig())
+    arrival_times = pick_arrival_times(wf, sr, TdoaConfig())
+    # Geometric prediction: TDOA(2 - 0) = (dist(src, s2) - dist(src, s0)) / c_eff.
+    # c_eff is the grid group velocity for the 20-90 kHz band (docs/sources.md).
+    c_eff = 1200.0
     d0 = float(np.hypot(src[0] - sensors[0, 0], src[1] - sensors[0, 1]))
     d2 = float(np.hypot(src[0] - sensors[2, 0], src[1] - sensors[2, 1]))
-    predicted_tdoa = (d2 - d0) / c_g
-    measured_tdoa = tdoas[2].lag_s
-    # 80 us tolerance: the onset-based TDOA detects the band's low-frequency edge
-    # (slower group velocity), so the measured TDOA is biased relative to the
-    # single-frequency prediction at the band centre. 80 us at c~1000 m/s is ~8 cm
-    # of position systematic \u2014 the localisation solver (1.3) will use a calibrated
-    # effective wave speed rather than the theoretical c_g, absorbing this bias.
-    assert abs(measured_tdoa - predicted_tdoa) < 80.0e-6, (
+    predicted_tdoa = (d2 - d0) / c_eff
+    measured_tdoa = float(arrival_times[2] - arrival_times[0])
+    assert abs(measured_tdoa - predicted_tdoa) < 30.0e-6, (
         f"measured {measured_tdoa * 1e6:.1f} us vs predicted {predicted_tdoa * 1e6:.1f} us "
-        f"diff {abs(measured_tdoa - predicted_tdoa) * 1e6:.1f} us > 80 us"
+        f"diff {abs(measured_tdoa - predicted_tdoa) * 1e6:.1f} us > 30 us"
     )

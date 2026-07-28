@@ -105,7 +105,7 @@ def measure_dispersion_bias(
 
     source = CrackGrowthSource(source_xy_m, dx, nx, ny)
     result = simulate(source, duration_s=duration_s, plate=plate, solver=solver)
-    sensor_pos = SensorLayout().positions_m[sensor_idx]
+    sensor_pos = SensorLayout().positions_for_plate(plate)[sensor_idx]
     distance = float(np.hypot(sensor_pos[0] - source_xy_m[0], sensor_pos[1] - source_xy_m[1]))
 
     wave = result.waveforms[sensor_idx]
@@ -128,8 +128,12 @@ def measure_dispersion_bias(
 
 
 def theoretical_group_velocity(freq_hz: float, plate: PlateConfig | None = None) -> float:
-    """Theoretical A0 group velocity: c_g(f) = (4*pi^2*D/(rho h))^{1/4} * sqrt(f)."""
+    """Theoretical A0 group velocity: c_g(f) = 2 * (4*pi^2*D/(rho h))^{1/4} * sqrt(f).
+
+    For the Kirchhoff dispersion relation omega = sqrt(D/(rho h)) * k^2, the group
+    velocity d omega/d k is exactly twice the phase velocity omega/k.
+    """
     plate = plate or PlateConfig()
     d = plate.flexural_rigidity
     rhoh = plate.mass_per_area
-    return float((4.0 * np.pi**2 * d / rhoh) ** 0.25 * np.sqrt(freq_hz))
+    return float(2.0 * (4.0 * np.pi**2 * d / rhoh) ** 0.25 * np.sqrt(freq_hz))

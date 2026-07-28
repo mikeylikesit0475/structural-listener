@@ -26,7 +26,22 @@ htmlcov/
 # Generated artefacts (data + figures are not committed; see DVC notes in ARCHITECTURE.md)
 data/raw/
 data/processed/
+data/out/
+data/cnn.onnx*
+data/replay/
 *.npz
 !tests/data/**/*.npz
 docs/figures/*.png
 !docs/figures/.gitkeep
+
+# UI (Next.js)
+ui/node_modules/
+ui/.next/
+ui/out/
+ui/build/
+ui/*.tsbuildinfo
+ui/next-env.d.ts
+ui/.vercel
+
+# Session logs (not for the repo)
+session-ses_*.md
