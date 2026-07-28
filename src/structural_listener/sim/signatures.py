@@ -65,7 +65,7 @@ class CrackGrowthSource(_BaseSource):
         ny: int,
         centre_freq_hz: float = 80.0e3,
         bandwidth_hz: float = 40.0e3,
-        amplitude: float = 1.0e4,
+        amplitude: float = 5.0e4,
         duration_s: float = 0.3e-3,
         t0_s: float = 0.0,
     ) -> None:
@@ -106,7 +106,7 @@ class FrictionSource(_BaseSource):
         ny: int,
         centre_freq_hz: float = 30.0e3,
         bandwidth_hz: float = 5.0e3,
-        amplitude: float = 4.0e3,
+        amplitude: float = 2.0e4,
         duration_s: float = 2.0e-3,
         t0_s: float = 0.0,
     ) -> None:
@@ -149,7 +149,7 @@ class ImpactSource(_BaseSource):
         nx: int,
         ny: int,
         centre_freq_hz: float = 8.0e3,
-        amplitude: float = 2.5e4,
+        amplitude: float = 1.0e5,
         duration_s: float = 0.5e-3,
         t0_s: float = 0.0,
     ) -> None:

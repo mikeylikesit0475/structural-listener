@@ -76,7 +76,7 @@ def _bandpass_arrival_time(
 
 
 def measure_dispersion_bias(
-    source_xy_m: tuple[float, float] = (0.05, 0.05),
+    source_xy_m: tuple[float, float] = (0.15, 0.15),
     sensor_idx: int = 1,
     low_band_hz: tuple[float, float] = (20.0e3, 10.0e3),
     high_band_hz: tuple[float, float] = (70.0e3, 10.0e3),

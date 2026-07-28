@@ -28,12 +28,16 @@ from structural_listener.sim.fdtd import SimResult
 class SensorModelConfig:
     """Parameters for the sensor model. See ``docs/sources.md`` for citations."""
 
-    # White noise floor, in m/s (velocity at the sensor). A good piezo preamp achieves
-    # ~3e-7 m/s equivalent noise; we use this rather than 1e-6 so the far channels on a
-    # 1 m plate remain detectable (13-16 dB SNR at the default source amplitudes).
-    noise_rms_white: float = 3.0e-7
-    # 1/f noise component amplitude at 1 Hz, in m/s.
-    noise_pink_at_1hz: float = 2.0e-7
+    # White noise floor, in m/s (velocity at the sensor). Calibrated so the hit
+    # detector's 4-sigma threshold on the band-limited signal rejects pure noise while
+    # detecting the direct arrival at all four sensors for a centre-plate event.
+    # 1e-7 is a high-quality piezo system; real systems vary 1e-8 to 1e-6.
+    noise_rms_white: float = 1.0e-7
+    # 1/f noise component amplitude at 1 Hz, in m/s. The 1/f noise has power across all
+    # frequencies including the 20-90 kHz detection band, so it must be well below the
+    # white noise floor there. At 1 Hz the pink noise dominates; at 20 kHz it's ~400x
+    # lower (1/f scaling), so 5e-8 at 1 Hz gives ~1e-10 at 20 kHz \u2014 below the 1e-7 white.
+    noise_pink_at_1hz: float = 5.0e-8
     # Per-channel gain mismatch: gain = 1 + U(-spread, +spread).
     gain_spread: float = 0.02
     # Material attenuation coefficient at 100 kHz, in Np/m. Aluminium Q~1000 at 100 kHz
@@ -49,32 +53,28 @@ class SensorModelConfig:
 
 
 def _pink_noise(n: int, rng: np.random.Generator, amplitude_at_1hz: float, dt: float) -> np.ndarray:
-    """Generate 1/f noise by integrating filtered white noise (Voss-McCartney approximation).
+    """Generate 1/f noise by filtering white noise in the frequency domain.
 
-    The amplitude at 1 Hz is normalised to ``amplitude_at_1hz``; other frequencies follow
-    the 1/f power law. This is a standard cheap approximation \u2014 not a precision 1/f
-    generator, but adequate for sensor-noise modelling.
+    The PSD is shaped as 1/f, so the amplitude at frequency f is amplitude_at_1hz / f.
+    This is a proper 1/f generator \u2014 the time-domain cumulative-sum approach produces a
+    random walk with too much high-frequency power.
     """
     white = rng.standard_normal(n)
-    # Integrate white noise to get 1/f^2 (Brownian), then take a fractional derivative
-    # back toward 1/f by filtering. Simpler: cumulative sum gives 1/f^2; we want 1/f, so
-    # use a half-integration via a first-order filter on the cumulative sum.
-    cumsum = np.cumsum(white)
-    # High-pass at f_min = 1/(n*dt) to keep the signal finite.
-    f_min = 1.0 / (n * dt)
-    # First-order high-pass.
-    alpha = 2.0 * np.pi * f_min * dt / (1.0 + 2.0 * np.pi * f_min * dt)
-    filtered = np.empty(n)
-    prev = 0.0
-    for k in range(n):
-        prev = (1.0 - alpha) * prev + alpha * (cumsum[k] - (cumsum[k - 1] if k > 0 else 0.0))
-        filtered[k] = cumsum[k] - prev
-    # Normalise so the amplitude at 1 Hz matches the target.
-    # The PSD at 1 Hz of the filtered signal is ~ unit; scale by amplitude_at_1hz.
+    spec = np.fft.rfft(white)
+    freqs = np.fft.rfftfreq(n, d=dt)
+    # 1/f amplitude shaping: |H(f)| = 1/f, with f=0 guarded.
+    shaping = np.zeros_like(freqs)
+    nonzero = freqs > 0
+    shaping[nonzero] = 1.0 / freqs[nonzero]
+    # Normalise so the amplitude at 1 Hz is 1.0, then scale by the target.
+    spec_shaped = spec * shaping
+    filtered = np.fft.irfft(spec_shaped, n=n)
+    # Normalise to the target amplitude at 1 Hz.
     current_rms = float(np.std(filtered))
     if current_rms > 0.0:
         filtered = filtered * (amplitude_at_1hz / current_rms)
-    return filtered
+    out: np.ndarray = filtered
+    return out
 
 
 def _apply_frequency_dependent_attenuation(
