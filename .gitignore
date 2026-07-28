@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+
+# Test / coverage
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# Generated artefacts (data + figures are not committed; see DVC notes in ARCHITECTURE.md)
+data/raw/
+data/processed/
+*.npz
+!tests/data/**/*.npz
+docs/figures/*.png
+!docs/figures/.gitkeep
