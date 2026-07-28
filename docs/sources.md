@@ -78,7 +78,22 @@ a physics choice.
 
 ## Sensor model
 
-_Pending Sprint 0.4._
+Implemented in `src/structural_listener/sim/sensor_model.py`. Three effects, all cited:
+
+| Parameter | Value | Units | Source |
+|-----------|-------|-------|--------|
+| White noise floor | 1.0e-6 | m/s | Guess \u2014 typical piezo preamp noise, -60 dB rel 1 m/s |
+| Pink (1/f) noise at 1 Hz | 5.0e-7 | m/s | Guess \u2014 1/f component of sensor electronics noise |
+| Gain mismatch spread | \u00b10.02 | \u2014 | Guess \u2014 typical piezo channel-to-channel variation is 1\u20133% [Grosse] |
+| Attenuation coeff at 100 kHz | 1.0 | Np/m | [Grosse] \u2014 aluminium Q~1000 at 100 kHz gives \u03b1~1 Np/m |
+| Attenuation freq exponent | 2.0 | \u2014 | [Grosse] \u2014 hysteretic damping scales as f^2 for metals |
+| Repro seed | 42 | \u2014 | N/A \u2014 determinism for testing |
+
+**Geometric spreading (1/\u221ar in 2D)** is already in the FDTD propagation \u2014 the solver
+naturally attenuates with distance \u2014 so it is NOT re-applied in the sensor model.
+
+**Reflections** from the clamped plate boundaries are also already in the solver output
+(ADR-006). The sensor model does not add or remove them.
 
 ## Citation list
 
