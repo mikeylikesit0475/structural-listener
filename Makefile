@@ -15,11 +15,11 @@ test: ## Run pytest
 
 check: lint typecheck test ## All gates
 
-# --- Sprint 0.6 CLI (implementation lands in 0.6; stubs keep the Makefile honest) ---
-# Each target writes a 4-channel .npz with ground-truth source coordinates to data/out/.
+# --- Sprint 0.6 CLI: inject a simulated event, write 4-channel .npz with ground truth ---
+# Usage: make crack X=0.62 Y=0.31
+# Output: data/out/<type>_<x>_<y>.npz with waveforms, sample rate, source coords, sensor layout.
 crack friction impact noise:
-	@echo "Target '$@' not implemented yet (Sprint 0.6)."
-	@exit 1
+	uv run python -m structural_listener.cli.inject $@ --x $(X) --y $(Y)
 
 replay:
 	@echo "Target 'replay' not implemented yet (Sprint 2.7)."
